@@ -39,7 +39,10 @@ def get_data_loaders(cfgs):
 
     label_file = cfgs.get('label_file', 'data/list_attr_celeba.txt')
 
-    labels = extract_labels(label_file)
+    is_imagenet = cfgs.get('is_imagenet', False)
+
+    if not is_imagenet:
+        labels = extract_labels(label_file)
 
     load_gt_depth = cfgs.get('load_gt_depth', False)
     AB_dnames = cfgs.get('paired_data_dir_names', ['A', 'B'])
@@ -50,6 +53,9 @@ def get_data_loaders(cfgs):
         get_loader = lambda **kargs: get_paired_image_loader(**kargs, batch_size=batch_size, image_size=image_size, crop=crop, AB_dnames=AB_dnames, AB_fnames=AB_fnames)
     else:
         get_loader = lambda **kargs: get_image_loader(**kargs, batch_size=batch_size, image_size=image_size, crop=crop)
+
+    if is_imagenet:
+        get_loader = lambda **kargs: get_imagenet_loader(**kargs, batch_size=batch_size, image_size=image_size, crop=crop)
 
     if run_train:
         train_data_dir = os.path.join(train_val_data_dir, "train")
@@ -140,6 +146,20 @@ class ImageDataset(torch.utils.data.Dataset):
 
     def name(self):
         return 'ImageDataset'
+
+
+def get_imagenet_loader(data_dir, labels, is_validation=False,
+    batch_size=256, num_workers=4, image_size=256, crop=None, rotated_angle=None, jitter_scale=None):
+
+    dataset = torch.utils.data.ImageFolder(data_dir)
+    loader = torch.utils.data.DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=not is_validation,
+        num_workers=num_workers,
+        pin_memory=True
+    )
+    return loader
 
 
 def get_image_loader(data_dir, labels, is_validation=False,
