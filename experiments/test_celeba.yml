@@ -2,15 +2,16 @@
 ## trainer
 run_test: true
 batch_size: 64
-checkpoint_dir: results/celeba
+checkpoint_dir: results/3d_classification/
 checkpoint_name: checkpoint030.pth
-test_result_dir: results/celeba/test_results_checkpoint030
+test_result_dir: results/3d_classification/test_results_checkpoint030
 
 ## dataloader
 num_workers: 4
 image_size: 64
 load_gt_depth: false
 test_data_dir: data/celeba_cropped/test
+label_file: data/list_attr_celeba.txt
 
 ## model
 model_name: unsup3d_celeba

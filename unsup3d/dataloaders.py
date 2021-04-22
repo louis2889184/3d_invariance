@@ -5,16 +5,41 @@ import numpy as np
 from PIL import Image
 
 
+def extract_labels(label_file):
+    labels = {}
+    with open(label_file, "r") as f:
+        lines = f.readlines()
+
+        label_names = lines[1].rstrip().split(" ")
+
+        for line in lines[2:]:
+            name_attr = line.rstrip().split(" ")
+            name_attr = [n for n in name_attr if n != ""]
+            name = name_attr[0]
+            attr = name_attr[1:]
+
+            labels[name] = {n:a  for n, a in zip(label_names, attr)}
+
+    return labels
+
+
 def get_data_loaders(cfgs):
     batch_size = cfgs.get('batch_size', 64)
     num_workers = cfgs.get('num_workers', 4)
     image_size = cfgs.get('image_size', 64)
     crop = cfgs.get('crop', None)
 
+    rotated_angle = cfgs.get('rotated_angle', None)
+    jitter_scale = cfgs.get('jitter_scale', None)
+
     run_train = cfgs.get('run_train', False)
     train_val_data_dir = cfgs.get('train_val_data_dir', './data')
     run_test = cfgs.get('run_test', False)
     test_data_dir = cfgs.get('test_data_dir', './data/test')
+
+    label_file = cfgs.get('label_file', 'data/list_attr_celeba.txt')
+
+    labels = extract_labels(label_file)
 
     load_gt_depth = cfgs.get('load_gt_depth', False)
     AB_dnames = cfgs.get('paired_data_dir_names', ['A', 'B'])
@@ -32,13 +57,14 @@ def get_data_loaders(cfgs):
         assert os.path.isdir(train_data_dir), "Training data directory does not exist: %s" %train_data_dir
         assert os.path.isdir(val_data_dir), "Validation data directory does not exist: %s" %val_data_dir
         print(f"Loading training data from {train_data_dir}")
-        train_loader = get_loader(data_dir=train_data_dir, is_validation=False)
+        train_loader = get_loader(data_dir=train_data_dir, labels=labels, is_validation=False)
         print(f"Loading validation data from {val_data_dir}")
-        val_loader = get_loader(data_dir=val_data_dir, is_validation=True)
+        val_loader = get_loader(data_dir=val_data_dir, labels=labels, is_validation=True)
     if run_test:
         assert os.path.isdir(test_data_dir), "Testing data directory does not exist: %s" %test_data_dir
         print(f"Loading testing data from {test_data_dir}")
-        test_loader = get_loader(data_dir=test_data_dir, is_validation=True)
+        test_loader = get_loader(data_dir=test_data_dir, labels=labels, is_validation=True, 
+            rotated_angle=rotated_angle, jitter_scale=jitter_scale)
 
     return train_loader, val_loader, test_loader
 
@@ -62,14 +88,29 @@ def make_dataset(dir):
 
 
 class ImageDataset(torch.utils.data.Dataset):
-    def __init__(self, data_dir, image_size=256, crop=None, is_validation=False):
+    def __init__(self, data_dir, labels, image_size=256, rotated_angle=None, jitter_scale=None, crop=None, is_validation=False):
         super(ImageDataset, self).__init__()
         self.root = data_dir
+        self.labels = labels
         self.paths = make_dataset(data_dir)
         self.size = len(self.paths)
         self.image_size = image_size
         self.crop = crop
         self.is_validation = is_validation
+
+        self.test_augment = []
+
+        if rotated_angle != None:
+            self.test_augment.append(
+                tfs.RandomRotation(rotated_angle)
+            )
+
+        if jitter_scale != None:
+            self.test_augment.append(
+                tfs.ColorJitter(jitter_scale, jitter_scale, jitter_scale, jitter_scale)
+            )
+
+        self.test_augment = tfs.Compose(self.test_augment)
 
     def transform(self, img, hflip=False):
         if self.crop is not None:
@@ -81,13 +122,18 @@ class ImageDataset(torch.utils.data.Dataset):
         img = tfs.functional.resize(img, (self.image_size, self.image_size))
         if hflip:
             img = tfs.functional.hflip(img)
+        
+        img = self.test_augment(img)
+
         return tfs.functional.to_tensor(img)
 
     def __getitem__(self, index):
         fpath = self.paths[index % self.size]
+        name = fpath.split("/")[-1]
+        label = (int(self.labels[name]["Male"]) + 1) // 2 # tranform [-1, s1] to [0, 1]
         img = Image.open(fpath).convert('RGB')
         hflip = not self.is_validation and np.random.rand()>0.5
-        return self.transform(img, hflip=hflip)
+        return self.transform(img, hflip=hflip), torch.LongTensor([label])
 
     def __len__(self):
         return self.size
@@ -96,10 +142,11 @@ class ImageDataset(torch.utils.data.Dataset):
         return 'ImageDataset'
 
 
-def get_image_loader(data_dir, is_validation=False,
-    batch_size=256, num_workers=4, image_size=256, crop=None):
+def get_image_loader(data_dir, labels, is_validation=False,
+    batch_size=256, num_workers=4, image_size=256, crop=None, rotated_angle=None, jitter_scale=None):
 
-    dataset = ImageDataset(data_dir, image_size=image_size, crop=crop, is_validation=is_validation)
+    dataset = ImageDataset(data_dir, labels, image_size=image_size, crop=crop, 
+        is_validation=is_validation, rotated_angle=rotated_angle, jitter_scale=jitter_scale)
     loader = torch.utils.data.DataLoader(
         dataset,
         batch_size=batch_size,

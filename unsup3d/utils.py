@@ -34,10 +34,14 @@ def setup_runtime(args):
     if args.config is not None and os.path.isfile(args.config):
         cfgs = load_yaml(args.config)
 
+    cfgs['rotated_angle'] = args.rotated_angle
+    cfgs['jitter_scale'] = args.jitter_scale
+
+    print("rotate and jitter param: ", cfgs['rotated_angle'], cfgs['jitter_scale'])
     cfgs['config'] = args.config
     cfgs['seed'] = args.seed
     cfgs['num_workers'] = args.num_workers
-    cfgs['device'] = 'cuda:0' if torch.cuda.is_available() and cuda_device_id is not None else 'cpu'
+    cfgs['device'] = 'cuda' # if torch.cuda.is_available() and cuda_device_id is not None else 'cpu'
 
     print(f"Environment: GPU {cuda_device_id} seed {args.seed} number of workers {args.num_workers}")
     return cfgs

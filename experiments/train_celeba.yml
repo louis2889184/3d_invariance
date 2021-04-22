@@ -3,7 +3,7 @@
 run_train: true
 num_epochs: 30
 batch_size: 64
-checkpoint_dir: results/celeba
+checkpoint_dir: results/3d_classification
 save_checkpoint_freq: 1
 keep_num_checkpoint: 2
 resume: true
@@ -15,6 +15,7 @@ num_workers: 4
 image_size: 64
 load_gt_depth: false
 train_val_data_dir: data/celeba_cropped
+label_file: data/list_attr_celeba.txt
 
 ## model
 model_name: unsup3d_celeba
